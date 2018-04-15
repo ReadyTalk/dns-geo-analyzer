@@ -11,4 +11,5 @@ spec:
           containers:
           - name: resolver
             image: readytalk/dns-geo-analyzer
+            imagePullPolicy: Always
           restartPolicy: OnFailure
