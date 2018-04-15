@@ -24,7 +24,7 @@ def get_external_ip():
 def get_geo(ip_addr):
     r = requests.get('http://api.ipstack.com/{0}?access_key={1}'.format(ip_addr, IPSTACK_API_KEY))
     geo = json.loads(r.text)
-    geo['location'].pop('languages')
+    geo.pop('location')
     return geo
 
 
