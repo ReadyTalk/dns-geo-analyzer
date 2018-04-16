@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dns-geo-analyzer
+  labels:
+    k8s-app: dns-geo-analyzer
+spec:
+  selector:
+    matchLabels:
+      name: dns-geo-analyzer
+  template:
+    metadata:
+      labels:
+        name: dns-geo-analyzer
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: dns-geo-analyzer
+        image: readytalk/dns-geo-analyzer:prometheus
+        imagePullPolicy: Always
+        env:
+        - name: NAMERSERVERS
+          value: "google,8.8.8.8 cloudflare,1.1.1.1"
+        - name: SITES
+          value: "google,google.com"
+        - name: REQUEST_INTERVAL
+          value: "60"
+        - name: PROMETHEUS_PORT
+          value: "8000"
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
