@@ -17,6 +17,8 @@ DNS_REQUEST_TIME = Summary('dnsgeo_dns_request_processing_seconds', 'Time spent 
 GEO_REQUEST_TIME = Summary('dnsgeo_ipstack_request_processing_seconds', 'Time spent processing Geo lookups')
 GEO_REQUESTS = Counter('dnsgeo_ipstack_requests_total', 'Total geo requests to ipstack')
 DNS_REQUESTS = Counter('dnsgeo_dns_requests_total', 'Total DNS Requests')
+DNS_DATA = Counter('dnsgeo_dns_locations', 'DNS Data from resolver', ['ip', 'nameserver', 'nameserver_ip', 'site_shortname', 'site', 'region_code', 'region_name', 'zip'])
+LOCAL_IP_DATA = Counter('dnsgeo_local_data', 'Local IP DNS Data', ['ip', 'region_code', 'region_name', 'zip'])
 
 @DNS_REQUEST_TIME.time()
 def query_nameserver(nameserver, name):
@@ -56,8 +58,14 @@ def construct_record():
         record['local']['geo_data'] = get_geo(local_ip)
     except NameError:
         pass # This feature was not enabled
+    else:
+        local_region_code = record['local']['geo_data']['region_code']
+        local_region_name = record['local']['geo_data']['region_name']
+        local_zip = record['local']['geo_data']['zip']
+        LOCAL_IP_DATA.labels(local_ip, local_region_code, local_region_name, local_zip).inc()
 
     record['dns_data'] = test_dns(NAMESERVERS, SITES)
+
     return record
 
 
@@ -73,6 +81,14 @@ def test_dns(nameservers, queries):
                 dns_data[server[0]][query[0]]['geo_data'] = get_geo(ip)
             except NameError:
                 pass # Geolocation not enabled
+            else:
+                # Prometheus
+                #DNS_DATA = Counter('dnsgeo_dns_locations', 'DNS Data from resolver', ['ip', 'nameserver', 'nameserver_ip', 'site_shortname', 'site', 'region_code', 'region_name', 'zip'])
+                region_code = dns_data[server[0]][query[0]]['geo_data']['region_code']
+                region_name = dns_data[server[0]][query[0]]['geo_data']['region_name']
+                zipcode = dns_data[server[0]][query[0]]['geo_data']['zip']
+                DNS_DATA.labels(ip, server[0], server[1], query[0], query[1], region_code, region_name, zipcode).inc()
+
 
     return dns_data
 
