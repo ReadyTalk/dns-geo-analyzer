@@ -16,13 +16,9 @@ This will run the docker container, but mount the script to it from local for te
 
 ## Docker
 
-You can run this anywhere using docker.  Just pass an env file or set the following ENV
+You can run this anywhere using docker.  Just pass an env file like the example.
 
 ```
-export NAMESERVERS=google,8.8.8.8 cloudflare,1.1.1.1 opendns,208.67.222.222
-export SITES=google,google.com
-export REQUEST_INTERVAL=30
-
 docker run -itd --name resolver --env-file example.env readytalk/dns-geo-analyzer:latest
 ```
 
@@ -38,7 +34,7 @@ This is setup to also run as a prometheus endpoint.  There is an example daemons
 
 You can enable this by setting the IPSTACK_API_KEY env variable.  This will use your api key to lookup geolocation data.
 
-WARNING: This will use up your API calls.  Don't make too many
+WARNING: This will use up your API calls.  Don't make too many like I did an destroy your API limit in 2 days.
 
 ### Elasticsearch
 
