@@ -16,12 +16,18 @@ import datetime
 DNS_REQUEST_TIME = Summary('dnsgeo_dns_request_processing_seconds', 'Time spent processing DNS requests')
 GEO_REQUEST_TIME = Summary('dnsgeo_ipstack_request_processing_seconds', 'Time spent processing Geo lookups')
 GEO_REQUESTS = Counter('dnsgeo_ipstack_requests_total', 'Total geo requests to ipstack')
+GEO_REQUESTS2 = Counter('dnsgeo_getcitydetails_requests_total', 'Total requests to getcitydetails')
+
 DNS_REQUESTS = Counter('dnsgeo_dns_requests_total', 'Total DNS Requests')
-DNS_DATA = Counter('dnsgeo_dns_locations', 'DNS Data from resolver', ['ip', 'nameserver', 'nameserver_ip', 'site_shortname', 'site', 'region_code', 'region_name', 'zip'])
+DNS_GEO_DATA = Counter('dnsgeo_dns_location', 'DNS Data from resolver', ['ip', 'nameserver', 'nameserver_ip', 'site_shortname', 'site', 'region_code', 'region_name', 'zip'])
+DNS_BASE_DATA = Counter('dnsgeo_dns_resolution', 'DNS Data without geolocation', ['ip', 'nameserver', 'nameserver_ip', 'site_shortname', 'site'])
 LOCAL_IP_DATA = Counter('dnsgeo_local_data', 'Local IP DNS Data', ['ip', 'region_code', 'region_name', 'zip'])
 
 @DNS_REQUEST_TIME.time()
 def query_nameserver(nameserver, name):
+    """
+    Do a DNS query against a specified  nameserver
+    """
     resolver = dns.resolver.Resolver()
     resolver.nameservers=[nameserver]
     for rdata in resolver.query(name, 'A'):
@@ -30,12 +36,18 @@ def query_nameserver(nameserver, name):
 
 
 def get_external_ip():
+    """
+    Get my current externally-visible IP
+    """
     r = requests.get('http://whatismyip.akamai.com')
     return r.text
 
 
 @GEO_REQUEST_TIME.time()
 def get_geo(ip_addr):
+    """
+    Query the ipstack API for geoloaction details
+    """
     r = requests.get('http://api.ipstack.com/{0}?access_key={1}'.format(ip_addr, IPSTACK_API_KEY))
     geo = json.loads(r.text)
     geo.pop('location')
@@ -43,16 +55,36 @@ def get_geo(ip_addr):
     return geo
 
 
+def get_geo2(ip_addr):
+    """ 
+    An attempt at using getcitydetails instead of the ipstack API
+    The accuracy appears to be terrible
+    """
+    r = requests.get('http://getcitydetails.geobytes.com/GetCityDetails?callback=?&fqcn={0}'.format(ip_addr))
+    rjson = r.text[ r.text.index("(") + 1 : r.text.rindex(")") ]
+    geo = json.loads(rjson)
+    GEO_REQUESTS2.inc()
+    return geo
+
 def send_to_es(json_dict):
+    """
+    Send a dict as json to an Elasticsearch Index
+    """
     ES.index(index = ES_INDEX, body=str(json_dict), doc_type='test')
 
 
 def construct_record():
+    """
+    Build a json dict of a bunch of DNS data
+    """
     record = {}
     record['date'] = str(datetime.datetime.now())
     local_ip = get_external_ip()
     record['local'] = {}
     record['local']['ip'] = str(local_ip)
+
+    # For testing the new geo2 function
+    # print(json.dumps(get_geo2(local_ip), indent=4, sort_keys=True))
 
     try:
         record['local']['geo_data'] = get_geo(local_ip)
@@ -70,6 +102,9 @@ def construct_record():
 
 
 def test_dns(nameservers, queries):
+    """
+    Get some dns info using a list of nameservers and sites
+    """
     dns_data = {}
     for server in nameservers:
         dns_data[server[0]] = {}
@@ -87,14 +122,14 @@ def test_dns(nameservers, queries):
                 region_code = dns_data[server[0]][query[0]]['geo_data']['region_code']
                 region_name = dns_data[server[0]][query[0]]['geo_data']['region_name']
                 zipcode = dns_data[server[0]][query[0]]['geo_data']['zip']
-                DNS_DATA.labels(ip, server[0], server[1], query[0], query[1], region_code, region_name, zipcode).inc()
+                DNS_GEO_DATA.labels(ip, server[0], server[1], query[0], query[1], region_code, region_name, zipcode).inc()
+            DNS_BASE_DATA.labels(ip, server[0], server[1], query[0], query[1]).inc()
 
 
     return dns_data
 
 if __name__ == '__main__':
     """ Get all the environment config and run it """
-
 
     # Check for the basic configuration.  If not present, exit
     try:
