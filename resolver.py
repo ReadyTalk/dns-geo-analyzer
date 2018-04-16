@@ -6,13 +6,21 @@ import dns.resolver
 import json
 import requests
 from elasticsearch import Elasticsearch
+from prometheus_client import start_http_server, Summary, Counter
+import random
+import time
 import datetime
 
+INTERVAL=60
+REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing DNS requests')
+DNS_REQUESTS = Counter('dns_requests_total', 'Total DNS Requests')
 
+@REQUEST_TIME.time()
 def query_nameserver(nameserver, name):
     resolver = dns.resolver.Resolver()
     resolver.nameservers=[nameserver]
-    for rdata in resolver.query(name, 'A') :
+    for rdata in resolver.query(name, 'A'):
+        DNS_REQUESTS.inc()
         return(rdata)
 
 
@@ -65,6 +73,9 @@ def test_dns(nameservers, queries):
 
 if __name__ == '__main__':
     """ Get all the environment config and run it """
+
+
+    # Check for the basic configuration.  If not present, exit
     try:
         INIT_NAMESERVERS = os.environ['NAMESERVERS'].split(" ")
         INIT_SITES = os.environ['SITES'].split(" ")
@@ -82,23 +93,40 @@ if __name__ == '__main__':
     for site in INIT_SITES:
         SITES.append(site.split(","))
 
+    # If the port is set, the enable the prometheus endpoint
+    try:
+        PROMETHEUS_PORT = int(os.environ['PROMETHEUS_PORT'])
+    except KeyError:
+        print("Prometheus endpoint disabled")
+    else:
+        start_http_server(PROMETHEUS_PORT)
+
     # Check for an API token for ipstack
     try:
         IPSTACK_API_KEY = os.environ['IPSTACK_API_KEY']
     except KeyError:
-        print("You have not set an IPSTACK API endpoint.  Geolocation of your IP will not be performed")
+        print("You have not set an IPSTACK API endpoint.  Geolocation of IPs will not be performed")
 
-    final_json = json.dumps(construct_record(), indent=4, sort_keys=True )
-
-    try: 
+    # Check if elasticsearch exporting is enabled.
+    try:
         ES_ENDPOINT = os.environ['ES_ENDPOINT']
         ES_INDEX = os.environ['ES_INDEX']
     except KeyError:
+        ES_ENABLED = False
         print("ES Variables not set, ES will not be used")
     else:
-        print("Sending data to ES {0}".format(ES_ENDPOINT))
+        print("Elasticsearch enabled, data will be sent")
         ES = Elasticsearch([ES_ENDPOINT])
-        send_to_es(final_json)
+        ES_ENABLED = True
 
-    # Print the result no matter what
-    print(final_json)
+    # Start the program loop
+    while True:
+
+        final_json = json.dumps(construct_record(), indent=4, sort_keys=True )
+
+        if ES_ENABLED:
+            send_to_es(final_json)
+
+        # Print the result no matter what
+        print(final_json)
+        time.sleep(INTERVAL)
