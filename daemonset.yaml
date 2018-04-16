@@ -23,7 +23,7 @@ spec:
         image: readytalk/dns-geo-analyzer:prometheus
         imagePullPolicy: Always
         env:
-        - name: NAMERSERVERS
+        - name: NAMESERVERS
           value: "google,8.8.8.8 cloudflare,1.1.1.1"
         - name: SITES
           value: "google,google.com"
