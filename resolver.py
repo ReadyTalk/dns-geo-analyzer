@@ -2,6 +2,7 @@
 
 import socket
 import os
+import sys
 import dns.resolver
 import json
 import requests
@@ -11,11 +12,10 @@ import random
 import time
 import datetime
 
-INTERVAL=60
-REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing DNS requests')
+DNS_REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing DNS requests')
 DNS_REQUESTS = Counter('dns_requests_total', 'Total DNS Requests')
 
-@REQUEST_TIME.time()
+@DNS_REQUEST_TIME.time()
 def query_nameserver(nameserver, name):
     resolver = dns.resolver.Resolver()
     resolver.nameservers=[nameserver]
@@ -79,9 +79,13 @@ if __name__ == '__main__':
     try:
         INIT_NAMESERVERS = os.environ['NAMESERVERS'].split(" ")
         INIT_SITES = os.environ['SITES'].split(" ")
+        REQUEST_INTERVAL = int(os.environ['REQUEST_INTERVAL'])
     except KeyError:
-        print("You need to configure all the variables.  Please check the README")
+        print("You need to configure all the variables.  Please check the README, exiting...")
         sys.exit(1)
+    except ValueError:
+        print("REQUEST_INTERVAL must be an integer, exiting...")
+        sys.exit(2)
 
     # Parse the new nameserver lists
     NAMESERVERS = []
@@ -98,7 +102,10 @@ if __name__ == '__main__':
         PROMETHEUS_PORT = int(os.environ['PROMETHEUS_PORT'])
     except KeyError:
         print("Prometheus endpoint disabled")
+    except ValueError:
+        print("PROMETHEUS_PORT must be an integer, disabling Prometheus endpoint")
     else:
+        print("Prometheus endpoint server starting on port {0}".format(PROMETHEUS_PORT))
         start_http_server(PROMETHEUS_PORT)
 
     # Check for an API token for ipstack
@@ -129,4 +136,4 @@ if __name__ == '__main__':
 
         # Print the result no matter what
         print(final_json)
-        time.sleep(INTERVAL)
+        time.sleep(REQUEST_INTERVAL)
