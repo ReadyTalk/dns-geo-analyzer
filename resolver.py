@@ -12,7 +12,7 @@ import random
 import time
 import datetime
 
-DNS_REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing DNS requests')
+DNS_REQUEST_TIME = Summary('dns_request_processing_seconds', 'Time spent processing DNS requests')
 DNS_REQUESTS = Counter('dns_requests_total', 'Total DNS Requests')
 
 @DNS_REQUEST_TIME.time()
