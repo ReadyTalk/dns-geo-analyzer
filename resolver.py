@@ -12,8 +12,11 @@ import random
 import time
 import datetime
 
-DNS_REQUEST_TIME = Summary('dns_request_processing_seconds', 'Time spent processing DNS requests')
-DNS_REQUESTS = Counter('dns_requests_total', 'Total DNS Requests')
+# Define prometheus variables
+DNS_REQUEST_TIME = Summary('dnsgeo_dns_request_processing_seconds', 'Time spent processing DNS requests')
+GEO_REQUEST_TIME = Summary('dnsgeo_ipstack_request_processing_seconds', 'Time spent processing Geo lookups')
+GEO_REQUESTS = Counter('dnsgeo_ipstack_requests_total', 'Total geo requests to ipstack')
+DNS_REQUESTS = Counter('dnsgeo_dns_requests_total', 'Total DNS Requests')
 
 @DNS_REQUEST_TIME.time()
 def query_nameserver(nameserver, name):
@@ -29,10 +32,12 @@ def get_external_ip():
     return r.text
 
 
+@GEO_REQUEST_TIME.time()
 def get_geo(ip_addr):
     r = requests.get('http://api.ipstack.com/{0}?access_key={1}'.format(ip_addr, IPSTACK_API_KEY))
     geo = json.loads(r.text)
     geo.pop('location')
+    GEO_REQUESTS.inc()
     return geo
 
 
