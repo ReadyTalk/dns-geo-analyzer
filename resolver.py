@@ -160,6 +160,7 @@ if __name__ == '__main__':
     # Setup Logging
     logging.basicConfig( format="%(asctime)s %(levelname)7s  %(funcName)20s %(message)s")
     LOG = logging.getLogger("dnsgeo")
+
     LOG.setLevel(logging.DEBUG)
 
     # Check for the basic configuration.  If not present, exit
@@ -187,7 +188,6 @@ if __name__ == '__main__':
     except ValueError:
         LOG.critical("DNS_TIMEOUT must be an integer.  Exiting.....")
         sys.ext(3)
-
 
 
     # Parse the new nameserver lists
