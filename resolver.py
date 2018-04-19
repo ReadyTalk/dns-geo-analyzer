@@ -12,6 +12,7 @@ import random
 import time
 import datetime
 import clientsubnetoption
+import logging
 
 # Define prometheus variables
 DNS_REQUEST_TIME = Summary('dnsgeo_dns_request_processing_seconds', 'Time spent processing DNS requests')
@@ -29,14 +30,18 @@ def query_nameserver(nameserver, name):
     """
     Do a DNS query against a specified  nameserver
     """
-    cso = clientsubnetoption.ClientSubnetOption(get_external_ip())
+    LOG.debug("Querying {0} for {1}".format(nameserver, name))
     qname = dns.name.from_text(name)
+    cso = clientsubnetoption.ClientSubnetOption(get_external_ip())
     message = dns.message.make_query(qname, 'A')
     message.use_edns(options=[cso])
-    r = dns.query.udp(message, nameserver)
+    try:
+        r = dns.query.udp(message, nameserver, timeout=3, port=53)
+    except dns.exception.Timeout:
+        return 'TIMEOUT'
+
     ns_rrset = r.find_rrset(r.answer, qname, dns.rdataclass.IN, dns.rdatatype.A)
     for rr in ns_rrset:
-        print(rr)
         DNS_REQUESTS.inc()
         return rr
 
@@ -90,7 +95,7 @@ def construct_record():
     record['local']['ip'] = str(local_ip)
 
     # For testing the new geo2 function
-    # print(json.dumps(get_geo2(local_ip), indent=4, sort_keys=True))
+    LOG.debug(json.dumps(get_geo2(local_ip), indent=4, sort_keys=True))
 
     try:
         record['local']['geo_data'] = get_geo(local_ip)
@@ -111,6 +116,7 @@ def test_dns(nameservers, queries):
     """
     Get some dns info using a list of nameservers and sites
     """
+    LOG.debug("Nameservers: {0}".format(nameservers))
     dns_data = {}
     for server in nameservers:
         dns_data[server[0]] = {}
@@ -134,8 +140,27 @@ def test_dns(nameservers, queries):
 
     return dns_data
 
+
+def get_resolvers():
+    """ Get local system resolvers """
+    resolvers = []
+    try:
+        with open( '/etc/resolv.conf', 'r' ) as resolvconf:
+            for line in resolvconf.readlines():
+                line = line.split( '#', 1 )[ 0 ];
+                line = line.rstrip();
+                if 'nameserver' in line:
+                    resolvers.append( line.split()[ 1 ] )
+        return resolvers
+    except IOError as error:
+        return error.strerror
+
+
 if __name__ == '__main__':
-    """ Get all the environment config and run it """
+    # Setup Logging
+    logging.basicConfig( format="%(asctime)s %(levelname)7s  %(funcName)20s %(message)s")
+    LOG = logging.getLogger("dnsgeo")
+    LOG.setLevel(logging.DEBUG)
 
     # Check for the basic configuration.  If not present, exit
     try:
@@ -143,16 +168,25 @@ if __name__ == '__main__':
         INIT_SITES = os.environ['SITES'].split(" ")
         REQUEST_INTERVAL = int(os.environ['REQUEST_INTERVAL'])
     except KeyError:
-        print("You need to configure all the variables.  Please check the README, exiting...")
+        LOG.critical("You need to configure all the variables.  Please check the README, exiting...")
         sys.exit(1)
     except ValueError:
-        print("REQUEST_INTERVAL must be an integer, exiting...")
+        LOG.critical("REQUEST_INTERVAL must be an integer, exiting...")
         sys.exit(2)
 
     # Parse the new nameserver lists
     NAMESERVERS = []
     for server in INIT_NAMESERVERS:
         NAMESERVERS.append(server.split(","))
+
+    # Add the local resolvers
+    count = 1
+    for resolver in get_resolvers():
+        LOG.debug("Local resolver found: {0}".format(resolver))
+        NAMESERVERS.append(['local{0}'.format(count), resolver])
+        count += 1
+
+    LOG.debug("Nameservers: {0}".format(NAMESERVERS))
 
     # Parse the sites list too
     SITES = []
@@ -163,18 +197,18 @@ if __name__ == '__main__':
     try:
         PROMETHEUS_PORT = int(os.environ['PROMETHEUS_PORT'])
     except KeyError:
-        print("Prometheus endpoint disabled")
+        LOG.info("Prometheus endpoint disabled")
     except ValueError:
-        print("PROMETHEUS_PORT must be an integer, disabling Prometheus endpoint")
+        LOG.error("PROMETHEUS_PORT must be an integer, disabling Prometheus endpoint")
     else:
-        print("Prometheus endpoint server starting on port {0}".format(PROMETHEUS_PORT))
+        LOG.info("Prometheus endpoint server starting on port {0}".format(PROMETHEUS_PORT))
         start_http_server(PROMETHEUS_PORT)
 
     # Check for an API token for ipstack
     try:
         IPSTACK_API_KEY = os.environ['IPSTACK_API_KEY']
     except KeyError:
-        print("You have not set an IPSTACK API endpoint.  Geolocation of IPs will not be performed")
+        LOG.info("You have not set an IPSTACK API endpoint.  Geolocation of IPs will not be performed")
 
     # Check if elasticsearch exporting is enabled.
     try:
@@ -182,9 +216,9 @@ if __name__ == '__main__':
         ES_INDEX = os.environ['ES_INDEX']
     except KeyError:
         ES_ENABLED = False
-        print("ES Variables not set, ES will not be used")
+        LOG.info("ES Variables not set, ES will not be used")
     else:
-        print("Elasticsearch enabled, data will be sent")
+        LOG.info("Elasticsearch enabled, data will be sent")
         ES = Elasticsearch([ES_ENDPOINT])
         ES_ENABLED = True
 
@@ -197,5 +231,5 @@ if __name__ == '__main__':
             send_to_es(final_json)
 
         # Print the result no matter what
-        #print(final_json)
+        LOG.debug("Final JSON: {0}".format(final_json))
         time.sleep(REQUEST_INTERVAL)
