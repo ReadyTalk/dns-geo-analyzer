@@ -3,7 +3,7 @@
 import socket
 import os
 import sys
-import dns.resolver
+import dns
 import json
 import requests
 from elasticsearch import Elasticsearch
@@ -11,6 +11,7 @@ from prometheus_client import start_http_server, Summary, Counter
 import random
 import time
 import datetime
+import clientsubnetoption
 
 # Define prometheus variables
 DNS_REQUEST_TIME = Summary('dnsgeo_dns_request_processing_seconds', 'Time spent processing DNS requests')
@@ -28,11 +29,16 @@ def query_nameserver(nameserver, name):
     """
     Do a DNS query against a specified  nameserver
     """
-    resolver = dns.resolver.Resolver()
-    resolver.nameservers=[nameserver]
-    for rdata in resolver.query(name, 'A'):
+    cso = clientsubnetoption.ClientSubnetOption(get_external_ip())
+    qname = dns.name.from_text(name)
+    message = dns.message.make_query(qname, 'A')
+    message.use_edns(options=[cso])
+    r = dns.query.udp(message, nameserver)
+    ns_rrset = r.find_rrset(r.answer, qname, dns.rdataclass.IN, dns.rdatatype.A)
+    for rr in ns_rrset:
+        print(rr)
         DNS_REQUESTS.inc()
-        return(rdata)
+        return rr
 
 
 def get_external_ip():
@@ -56,7 +62,7 @@ def get_geo(ip_addr):
 
 
 def get_geo2(ip_addr):
-    """ 
+    """
     An attempt at using getcitydetails instead of the ipstack API
     The accuracy appears to be terrible
     """
@@ -191,5 +197,5 @@ if __name__ == '__main__':
             send_to_es(final_json)
 
         # Print the result no matter what
-        print(final_json)
+        #print(final_json)
         time.sleep(REQUEST_INTERVAL)

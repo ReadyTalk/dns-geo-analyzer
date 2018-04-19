@@ -1,4 +1,5 @@
 prometheus_client
-dnspython
+dnspython3
 requests
 elasticsearch~=5.0
+clientsubnetoption
