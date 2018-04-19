@@ -44,6 +44,10 @@ Set the ES_ENDPOINT and ES_INDEX to send these json objects to elasticsearch.  C
 
 This will control how often the server makes requests and queries.  It is number of seconds.
 
+### DNS_TIMEOUT
+
+The nubmer of seconds that a DNS query will wait to timeout
+
 ## NOTES
 
 The format of the ENV is very specific.  The short names are used so that we don't have dots in the keys, which makes the data ugly in ES

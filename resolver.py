@@ -36,7 +36,7 @@ def query_nameserver(nameserver, name):
     message = dns.message.make_query(qname, 'A')
     message.use_edns(options=[cso])
     try:
-        r = dns.query.udp(message, nameserver, timeout=3, port=53)
+        r = dns.query.udp(message, nameserver, timeout=DNS_TIMEOUT, port=53)
     except dns.exception.Timeout:
         return 'TIMEOUT'
 
@@ -166,13 +166,29 @@ if __name__ == '__main__':
     try:
         INIT_NAMESERVERS = os.environ['NAMESERVERS'].split(" ")
         INIT_SITES = os.environ['SITES'].split(" ")
+    except KeyError:
+        LOG.critical("You need to configure NAMESERVERS and SITES.  See the readme.  Exiting....")
+        sys.exit(1)
+
+    try:
         REQUEST_INTERVAL = int(os.environ['REQUEST_INTERVAL'])
     except KeyError:
-        LOG.critical("You need to configure all the variables.  Please check the README, exiting...")
-        sys.exit(1)
+        LOG.info("REQUEST_INTERVAL is being set to default of 10")
+        REQUEST_INTERVAL = 10
     except ValueError:
         LOG.critical("REQUEST_INTERVAL must be an integer, exiting...")
         sys.exit(2)
+
+    try:
+        DNS_TIMEOUT = int(os.environ['DNS_TIMEOUT'])
+    except KeyError:
+        LOG.info("DNS_TIMEOUT is being set to default of 5")
+        DNS_TIMEOUT=5
+    except ValueError:
+        LOG.critical("DNS_TIMEOUT must be an integer.  Exiting.....")
+        sys.ext(3)
+
+
 
     # Parse the new nameserver lists
     NAMESERVERS = []
